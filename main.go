@@ -173,6 +173,14 @@ func main() {
 	defer func() {
 		exe.Cmd("rm", "-f", outfile).Run()
 	}()
+	if *format == "vdi" && *vboxUuid != "" {
+		defer func() {
+			Log("Setting disk UUID")
+			if err = exe.Cmd("vboxmanage", "internalcommands", "sethduuid", outfinal, *vboxUuid).Run(); err != nil {
+				Exit(err)
+			}
+		}()
+	}
 	defer func() {
 		if *format == "raw" {
 			if err = exe.Cmd("mv", "-f", outfile, outfinal).Run(); err != nil {
