@@ -15,6 +15,9 @@ import (
 var kernelArgs = flag.String("kernel-args", "root=/dev/sda1 ro",
 	"Commandline flags to pass to the kernel")
 
+var initrd = flag.String("kernel-initrd", "",
+	"Initrd file to give the kernel on bootup, if any")
+
 var diskSize = flag.Uint64("disk-size", 128,
 	"Size of the created disk image in MB")
 
@@ -105,6 +108,7 @@ DEFAULT linux
 LABEL linux
     LINUX %s
     APPEND %s
+    %s
 `
 
 func main() {
@@ -269,16 +273,24 @@ func main() {
 	if err = exe.Cmd("cp", kernel, extlinux).Run(); err != nil {
 		Exit(err)
 	}
+	var initrdcfg string
+	if *initrd != "" {
+		if err = exe.Cmd("cp", *initrd, extlinux).Run(); err != nil {
+			Exit(err)
+		}
+		initrdcfg = fmt.Sprintf("INITRD %s", path.Base(*initrd))
+	}
 	cfgfile, err := os.Create(path.Join(extlinux, "syslinux.cfg"))
 	if err != nil {
 		Exit(err)
 	}
-	cfg := fmt.Sprintf(syslinuxConfig, path.Base(kernel), *kernelArgs)
+	cfg := fmt.Sprintf(syslinuxConfig,
+		path.Base(kernel), *kernelArgs, initrdcfg)
 	if _, err = cfgfile.Write([]byte(cfg)); err != nil {
 		Exit(err)
 	}
 	cfgfile.Close()
-	if err := exe.Cmd("extlinux", "--install", mountpoint).Run(); err != nil {
+	if err := exe.Cmd("extlinux", "--install", extlinux).Run(); err != nil {
 		Exit(err)
 	}
 
