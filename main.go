@@ -13,13 +13,19 @@ import (
 )
 
 var kernelArgs = flag.String("kernel-args", "root=/dev/sda1 ro",
-	"Commandline flags to pass to the kernel.")
+	"Commandline flags to pass to the kernel")
 
 var diskSize = flag.Uint64("disk-size", 128,
 	"Size of the created disk image in MB")
 
 var printLog = flag.Bool("print-log", false,
 	"Print the stdout/err log of commands that were run")
+
+var format = flag.String("format", "raw",
+	"Format of the disk image (raw, vdi, vmdk, vhd)")
+
+var vboxUuid = flag.String("vbox-uuid", "",
+	"If outputting to VDI, the UUID of the disk")
 
 var Usage = func() {
 	fmt.Fprintf(os.Stderr, `Usage: %s outfile kernel source...
@@ -82,6 +88,7 @@ func Log(entry string) {
 func CheckPrograms(programs ...string) {
 	missing := false
 	for _, program := range programs {
+		Log(fmt.Sprintf("Checking for program %s", program))
 		if _, err := exec.LookPath(program); err != nil {
 			fmt.Fprintln(os.Stderr, "Couldn't find program:", program)
 			missing = true
@@ -122,7 +129,16 @@ func main() {
 		}
 	}()
 
-	CheckPrograms(
+	outfinal := flag.Arg(0)
+	outfile := fmt.Sprintf("%s.tmp", outfinal)
+	kernel := flag.Arg(1)
+	sources := flag.Args()[2:]
+
+	if _, err := os.Stat(outfinal); err == nil {
+		Exit("Output file already exists")
+	}
+
+	programs := []string{
 		"dd",
 		"kpartx",
 		"losetup",
@@ -132,21 +148,46 @@ func main() {
 		"tar",
 		"umount",
 		"rsync",
-		"extlinux")
+		"extlinux",
+	}
 
-	outfile := flag.Arg(0)
-	kernel := flag.Arg(1)
-	sources := flag.Args()[2:]
+	switch *format {
+	case "raw":
+	case "vdi", "vmdk", "vhd":
+		programs = append(programs, "vboxmanage")
+	default:
+		Exit(fmt.Sprintf("Unknown format %s", *format))
+	}
+
+	CheckPrograms(programs...)
 
 	Log("Creating filesystem image")
 	err := exe.Cmd("dd",
 		"if=/dev/zero",
-		fmt.Sprintf("of=%s", flag.Arg(0)),
+		fmt.Sprintf("of=%s", outfile),
 		"bs=1M",
 		fmt.Sprintf("count=%d", *diskSize)).Run()
 	if err != nil {
 		Exit(err)
 	}
+	defer func() {
+		exe.Cmd("rm", "-f", outfile).Run()
+	}()
+	defer func() {
+		if *format == "raw" {
+			if err = exe.Cmd("mv", "-f", outfile, outfinal).Run(); err != nil {
+				Exit(err)
+			}
+		} else {
+			Log(fmt.Sprintf("Creating %s image", *format))
+			cmd := exe.Cmd("vboxmanage", "convertfromraw",
+				outfile, outfinal,
+				fmt.Sprintf("--format=%s", strings.ToUpper(*format)))
+			if err = cmd.Run(); err != nil {
+				Exit(err)
+			}
+		}
+	}()
 
 	Log("Creating partition table")
 	cmd := exe.Cmd("sfdisk", outfile)
