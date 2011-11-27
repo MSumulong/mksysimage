@@ -4,3 +4,4 @@ syntax: regexp
 \.log$
 ^bin/
 ^src/
+^mksysimage/mksysimage$
