@@ -3,4 +3,4 @@ syntax: regexp
 \.[568]$
 \.log$
 ^bin/
-src/mksysimage.googlecode.com/hg/mksysimage/mksysimage
+^src/
