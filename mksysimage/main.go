@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"errors"
 )
 
 var kernelArgs = flag.String("kernel-args", "root=/dev/sda1 ro",
@@ -31,11 +32,15 @@ var vboxUuid = flag.String("vbox-uuid", "",
 	"If outputting to VDI, the UUID of the disk")
 
 var Usage = func() {
-	fmt.Fprintf(os.Stderr, `Usage: %s outfile kernel source...
+	fmt.Fprintf(os.Stderr, `Usage: %s outfile kernel root:source...
 
 Multiple sources can be provided. If a source is a tarball, it is
-extracted to the root of the filesystem. If it's a directory, it
-is copied verbatim to the root of the filesystem.
+extracted to the root of the filesystem. If it's a directory, it is
+copied verbatim to the root of the filesystem. Each source is
+overlayed in the FS image at its corresponding root.
+
+Example:
+  sudo mksysimage out.raw vmlinuz /:./system/ /etc:conf.tgz
 
 `, os.Args[0])
 	flag.PrintDefaults()
@@ -294,8 +299,25 @@ func main() {
 		Exit(err)
 	}
 
-	for _, source := range sources {
-		Log(fmt.Sprintf("Populating filesystem from %s", source))
+	for _, rootandsource := range sources {
+		parts := strings.SplitN(rootandsource, ":", 2)
+		if len(parts) != 2 {
+			Exit(errors.New(fmt.Sprintf("Malformed source %s", rootandsource)))
+		}
+
+		root := parts[0]
+		source := parts[1]
+
+		Log(fmt.Sprintf("Populating %s from %s", root, source))
+
+		if !filepath.IsAbs(root) {
+			Exit("Given source root isn't absolute")
+		}
+		root = filepath.Join(mountpoint, root)
+		if err = os.MkdirAll(root, 0700); err != nil {
+			Exit(err)
+		}
+
 		source, err = filepath.Abs(source)
 		if err != nil {
 			Exit(err)
@@ -306,7 +328,7 @@ func main() {
 		}
 		var cmd *exec.Cmd
 		if st.IsDirectory() {
-			cmd = exe.Cmd("rsync", "-RrvP", ".", mountpoint)
+			cmd = exe.Cmd("rsync", "-RrvP", ".", root)
 			cmd.Dir = source
 			if err != nil {
 				Exit(err)
@@ -316,12 +338,13 @@ func main() {
 			if err != nil {
 				Exit(err)
 			}
-			cmd.Dir = mountpoint
+			cmd.Dir = root
 		}
 		if err = cmd.Run(); err != nil {
 			Exit(err)
 		}
 	}
+	exe.Cmd("find", mountpoint).Run()
 
 	Log("Build complete, cleaning up")
 }
