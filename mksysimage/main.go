@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -10,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"errors"
 )
 
 var kernelArgs = flag.String("kernel-args", "root=/dev/sda1 ro",
@@ -330,7 +330,7 @@ func main() {
 			Exit(err)
 		}
 		var cmd *exec.Cmd
-		if st.IsDirectory() {
+		if st.IsDir() {
 			cmd = exe.Cmd("rsync", "-RrvP", ".", root)
 			cmd.Dir = source
 			if err != nil {
