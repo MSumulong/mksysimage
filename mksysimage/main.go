@@ -25,6 +25,9 @@ var diskSize = flag.Uint64("disk-size", 128,
 var printLog = flag.Bool("print-log", false,
 	"Print the stdout/err log of commands that were run")
 
+var printFs = flag.Bool("print-fs", false,
+	"Print the FS image tree to stdout on completion")
+
 var format = flag.String("format", "raw",
 	"Format of the disk image (raw, vdi, vmdk, vhd)")
 
@@ -340,6 +343,15 @@ func main() {
 			}
 			cmd.Dir = root
 		}
+		if err = cmd.Run(); err != nil {
+			Exit(err)
+		}
+	}
+
+	if *printFs {
+		cmd = exe.Cmd("find", ".")
+		cmd.Dir = mountpoint
+		cmd.Stdout = os.Stdout
 		if err = cmd.Run(); err != nil {
 			Exit(err)
 		}
