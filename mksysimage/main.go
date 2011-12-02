@@ -344,7 +344,6 @@ func main() {
 			Exit(err)
 		}
 	}
-	exe.Cmd("find", mountpoint).Run()
 
 	Log("Build complete, cleaning up")
 }
